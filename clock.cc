@@ -117,7 +117,7 @@ ISR (TIM1_COMPA_vect) {
     if (!txSending && !buffer.empty()) {
         PORTA ^= (1 << PA3);
         txData = Bit_Reverse(buffer.read());
-        if (txData == 0xfa) {
+        if (txData == 0xfa || txData == 0xfb || txData == 0xfc) {
             return;
         }
         txSending = 1;
