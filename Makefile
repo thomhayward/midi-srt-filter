@@ -1,5 +1,5 @@
 
-PROJECT = clock
+PROJECT = filter
 
 MCU ?= attiny84
 PORT ?= $(firstword $(wildcard /dev/cu.usbmodem*))
@@ -16,6 +16,7 @@ OBJCOPY = avr-objcopy
 
 %.hex: %.elf
 	$(OBJCOPY) -j .text -j .data -O ihex $< $@
+	avr-size -C --mcu=$(MCU) $<
 
 .PHONY: build
 build: $(PROJECT).hex
