@@ -8,7 +8,6 @@
 #define F_CPU 20000000UL
 #endif
 
-
 #define BAUDRATE        31250
 #define CYCLES_PER_BIT  (F_CPU / BAUDRATE)
 #if (CYCLES_PER_BIT > 255)
@@ -27,43 +26,11 @@
 #include <avr/io.h>
 #include <stdlib.h>
 #include <util/delay.h>
+#include "ring_buffer.hh"
 
-#define BUFFER_LENGTH 128
+#define BUFFER_LENGTH 64
 
-class CircularBuffer {
-public:
-    uint8_t buffer[BUFFER_LENGTH];
-    uint8_t head = 0;
-    uint8_t tail = 0;
-    bool full = false;
-    //
-    bool empty() const {
-        //if head and tail are equal, we are empty
-        return (!full && (head == tail));
-    }
-    //
-    void append(uint8_t value) {
-        buffer[head] = value;
-        if (full) {
-		    tail = (tail + 1) % BUFFER_LENGTH;
-	    }
-    	head = (head + 1) % BUFFER_LENGTH;
-    	full = head == tail;
-    }
-    //
-    uint8_t read() {
-        if (empty()) {
-		    return 0x00;
-	    }
-        //Read data and advance the tail (we now have a free space)
-        uint8_t value = buffer[tail];
-        full = false;
-        tail = (tail + 1) % BUFFER_LENGTH;
-        return value;
-    }
-};
-
-static CircularBuffer buffer;
+static ring_buffer<uint8_t, BUFFER_LENGTH> buffer;
 static volatile uint8_t txData;
 static volatile uint8_t txSending = 0;
 static volatile int8_t txBit = -1;
