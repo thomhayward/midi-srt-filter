@@ -32,8 +32,16 @@
 
 static ring_buffer<uint8_t, BUFFER_LENGTH> buffer;
 
+#define TX_IDLE     -2
+#define TX_START    -1
+#define TX_STOP     8
+#define TX_DATA_START 0
 static uint8_t tx_buffer;
-static volatile uint8_t tx_status = 8;
+static volatile int8_t tx_state = -2;
+
+#define LED_START   32
+static uint8_t send_led = 0;
+static uint8_t block_led = 0;
 
 uint8_t reverse_byte(uint8_t x) {
     x = ((x >> 1) & 0x55) | ((x << 1) & 0xaa);
@@ -42,12 +50,28 @@ uint8_t reverse_byte(uint8_t x) {
     return x;    
 }
 
+void update_leds() {
+    if (send_led > 0) {
+        PORTA |= (1 << PA3);
+        send_led -= 1;
+    } else {
+        PORTA &= ~(1 << PA3);
+    }
+    if (block_led > 0) {
+        PORTA |= (1 << PA2);
+        block_led  -= 1;
+    }
+    else {
+        PORTA &= ~(1 << PA2);
+    }
+}
+
 int main() {
 
     cli();                                                      // disable interrupts during setup
 
-    // setup status LED
-    DDRA |= (1 << PA3);
+    // setup status LEDs
+    DDRA |= (1 << PA2) | (1 << PA3);
 
     // setup rx
     DDRA &= ~((1 << PA6) | (1 << PA5) | (1 << PA4));            // set PA6/DI, PA5/DO, and PA5/SCK as input
@@ -103,25 +127,35 @@ ISR (SIG_USI_OVERFLOW) {                                        // USI has read 
 }
 
 ISR (TIM1_COMPA_vect) {
-    if (tx_status == 8 && !buffer.empty()) {                    // we're not transmitting any data, but have data to send
-        PORTA ^= (1 << PA3);                                    // flip status led
+    update_leds();
+    if (tx_state == TX_IDLE && !buffer.empty()) {
+        send_led = LED_START;
         tx_buffer = reverse_byte(buffer.read());
-        if (tx_buffer == 0xfa || tx_buffer == 0xfb || tx_buffer == 0xfc) { // the filter!
+        if (tx_buffer == 0xfa || tx_buffer == 0xfb || tx_buffer == 0xfc) {
+            block_led = LED_START;
             return;
         }
-        PORTA &= ~(1 << PA7);                                   // start sending data by sending a start bit; set tx line LOW
-        tx_status = 0;                                          // set the first bit of tx_buffer to transmit on the next timer interrupt
+        tx_state = TX_START;
     }
-    else if (tx_status == 8) {                                  // we're either not transmitting anything or it's time to send a stop bit
-        PORTA |= (1 << PA7);                                    // set tx line HIGH
+    switch (tx_state) {
+        case TX_IDLE:                                           // not tx'ing
+            // PORTA |= (1 << PA7);                             // fallthrough to TX_STOP
+        case TX_STOP:                                           // stop bit
+            PORTA |= (1 << PA7);                                // set output HIGH to indicate stop bit
+            tx_state = TX_IDLE;                                 // idle after stop bit
+            break;
+        case TX_START:                                          // new tx
+            PORTA &= ~(1 << PA7);                               // set output LOW to indicate start bit
+            tx_state = TX_DATA_START;                           // start tx'ing bits on the next interrupt
+            break;
+        default:
+            if ((tx_buffer & (1 << tx_state)) == 0) {           // determine value of current bit
+                PORTA &= ~(1 << PA7);                           // set LOW iff 0
+            }
+            else {
+                PORTA |= (1 << PA7);                            // set HIGH iff 1
+            }
+            tx_state += 1;
     }
-    else {                                                      // send a bit of data
-        if ((tx_buffer & (1 << tx_status)) == 0) {              // bit is 0
-            PORTA &= ~(1 << PA7);                               // set tx line LOW
-        }
-        else {                                                  // bit is 1
-            PORTA |= (1 << PA7);                                // set tx line HIGH
-        }
-        ++tx_status;                                            // set the next bit to transmit on the next timer interrupt
-    }
+
 }
