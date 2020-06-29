@@ -31,9 +31,9 @@
 #define BUFFER_LENGTH 64
 
 static ring_buffer<uint8_t, BUFFER_LENGTH> buffer;
-static volatile uint8_t txData;
-static volatile uint8_t txSending = 0;
-static volatile int8_t txBit = -1;
+
+static uint8_t tx_buffer;
+static volatile uint8_t tx_status = 8;
 
 uint8_t Bit_Reverse(uint8_t x) {
     x = ((x >> 1) & 0x55) | ((x << 1) & 0xaa);
@@ -80,40 +80,28 @@ int main() {
 }
 
 ISR (TIM1_COMPA_vect) {
-
-    if (!txSending && !buffer.empty()) {
-        PORTA ^= (1 << PA3);
-        txData = Bit_Reverse(buffer.read());
-        if (txData == 0xfa || txData == 0xfb || txData == 0xfc) {
+    if (tx_status == 8 && !buffer.empty()) {    // we're not transmitting any data, but have data to send
+        PORTA ^= (1 << PA3);                    // flip status led
+        tx_buffer = Bit_Reverse(buffer.read());
+        if (tx_buffer == 0xfa || tx_buffer == 0xfb || tx_buffer == 0xfc) { // the filter!
             return;
         }
-        txSending = 1;
+        // we now have data to transmit, so send a start bit.
+        PORTA &= ~(1 << PA7);           // set tx line LOW
+        tx_status = 0;                  // set the first bit of tx_buffer to transmit on the next timer interrupt
+        return;                         // save some cycles return early
     };
-
-    if (txSending == 0) {
-        PORTA |= (1 << PA7);
-    } else {
-        if (txBit < 0) {
-            // Start bit is LOW
-            PORTA &= ~(1 << PA7);
-            txBit = 0;
-        } else if (txBit > 7) {
-            // Stop bit is HIGH
-            PORTA |= (1 << PA7);
-            txBit += 1;
-            if (txBit == 9) {
-                txSending = 0;
-                txBit = -1;
-            }
-        } else {
-            uint8_t bit = txData & (1 << txBit);
-            if (bit != 0) {
-                PORTA |= (1 << PA7);
-            } else {
-                PORTA &= ~(1 << PA7);
-            }
-            txBit += 1;
+    if (tx_status == 8) {               // we're either not transmitting anything or it's time to send a stop bit
+        PORTA |= (1 << PA7);            // set tx line HIGH
+    }
+    else {                              // send a bit of data
+        if ((tx_buffer & (1 << tx_status)) == 0) {
+            PORTA &= ~(1 << PA7);       // bit is 0, set tx line LOW
         }
+        else { 
+            PORTA |= (1 << PA7);        // bit is 1, set tx line HIGH
+        }
+        ++tx_status;                    // set the next bit to transmit on the next timer interrupt
     }
 }
 
