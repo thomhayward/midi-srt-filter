@@ -129,12 +129,12 @@ ISR (SIG_USI_OVERFLOW) {                                        // USI has read 
 ISR (TIM1_COMPA_vect) {
     update_leds();
     if (tx_state == TX_IDLE && !buffer.empty()) {
-        send_led = LED_START;
         tx_buffer = reverse_byte(buffer.read());
         if (tx_buffer == 0xfa || tx_buffer == 0xfb || tx_buffer == 0xfc) {
             block_led = LED_START;
             return;
         }
+        send_led = LED_START;
         tx_state = TX_START;
     }
     switch (tx_state) {
