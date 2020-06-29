@@ -6,7 +6,7 @@ PORT ?= $(firstword $(wildcard /dev/cu.usbmodem*))
 
 CXX = avr-g++
 CXXSTANDARD = -std=gnu++11
-CXXEXTRA = -Os -Wall -fno-exceptions -ffunction-sections -fdata-sections
+CXXEXTRA = -O3 -Wall -fno-exceptions -ffunction-sections -fdata-sections
 CXXFLAGS = $(CXXSTANDARD) $(CXXEXTRA) -mmcu=$(MCU)
 
 OBJCOPY = avr-objcopy
